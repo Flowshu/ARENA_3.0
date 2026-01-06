@@ -289,3 +289,25 @@ class MLP(nn.Module):
 
 rand_float_test(MLP, [2, 4, 768])
 load_gpt2_test(MLP, reference_gpt2.blocks[0].mlp, cache["normalized", 0, "ln2"])
+
+# %%
+class TransformerBlock(nn.Module):
+    def __init__(self, cfg: Config):
+        super().__init__()
+        self.cfg = cfg
+        self.ln1 = LayerNorm(cfg)
+        self.attn = Attention(cfg)
+        self.ln2 = LayerNorm(cfg)
+        self.mlp = MLP(cfg)
+
+    def forward(
+        self, resid_pre: Float[Tensor, "batch position d_model"]
+    ) -> Float[Tensor, "batch position d_model"]:
+        res = t.zeros(resid_pre.shape).to(device)
+        res += resid_pre
+        res += self.attn(self.ln1(res))
+        res += self.mlp(self.ln2(res))
+        return res
+
+rand_float_test(TransformerBlock, [2, 4, 768])
+load_gpt2_test(TransformerBlock, reference_gpt2.blocks[0], cache["resid_pre", 0])
