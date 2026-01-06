@@ -223,7 +223,36 @@ class Attention(nn.Module):
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
+        self.W_Q = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_K = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_V = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_O = nn.Parameter(t.empty((cfg.n_heads, cfg.d_head, cfg.d_model)))
+        self.b_Q = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_K = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_V = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_O = nn.Parameter(t.zeros((cfg.d_model)))
+        nn.init.normal_(self.W_Q, std=self.cfg.init_range)
+        nn.init.normal_(self.W_K, std=self.cfg.init_range)
+        nn.init.normal_(self.W_V, std=self.cfg.init_range)
+        nn.init.normal_(self.W_O, std=self.cfg.init_range)
         self.register_buffer("IGNORE", t.tensor(float("-inf"), dtype=t.float32, device=device))
+
+    def forward(
+        self, normalized_resid_pre: Float[Tensor, "batch posn d_model"]
+    ) -> Float[Tensor, "batch posn d_model"]:
+        # Step 1: Produce an attention pattern
+        queries = self.linear_map(normalized_resid_pre, self.W_Q, self.b_Q)
+        keys = self.linear_map(normalized_resid_pre, self.W_K, self.b_K)
+        attention_scores = einops.einsum(queries, keys, "batch seq1 heads head_dim, batch seq2 heads head_dim -> batch heads seq1 seq2")
+        scaled_masked = self.apply_causal_mask(attention_scores / math.sqrt(self.cfg.d_head))
+        attention_pattern = t.softmax(scaled_masked, dim=-1)
+        # Step 2: Move information from source tokens to destination token using attention pattern
+        values = self.linear_map(normalized_resid_pre, self.W_V, self.b_V)
+        z = einops.einsum(values, attention_pattern, "batch key_pos heads head_dim, batch heads query_pos key_pos -> batch query_pos heads head_dim")
+        return einops.einsum(z, self.W_O, "batch seq heads head_dim, heads head_dim dim -> batch seq dim") + self.b_O
+
+    def linear_map(self, r, w, b):
+        return einops.einsum(r, w, "batch seq dim, heads dim head_dim -> batch seq heads head_dim") + b
 
     def apply_causal_mask(
         self,
@@ -236,3 +265,5 @@ class Attention(nn.Module):
         return attn_scores.masked_fill(mask == 1, self.IGNORE)
 
 tests.test_causal_mask(Attention.apply_causal_mask)
+rand_float_test(Attention, [2, 4, 768])
+load_gpt2_test(Attention, reference_gpt2.blocks[0].attn, cache["normalized", 0, "ln1"])
