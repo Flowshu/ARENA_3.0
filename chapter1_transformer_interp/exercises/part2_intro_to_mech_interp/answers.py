@@ -344,3 +344,86 @@ def induction_attn_detector(cache: ActivationCache) -> list[str]:
     return attn_heads
 
 print("Induction heads = ", ", ".join(induction_attn_detector(rep_cache)))
+
+# %%
+seq_len = 50
+batch_size = 10
+rep_tokens_10 = generate_repeated_tokens(model, seq_len, batch_size)
+
+# We make a tensor to store the induction score for each head.
+# We put it on the model's device to avoid needing to move things between the GPU and CPU,
+# which can be slow.
+induction_score_store = t.zeros(
+    (model.cfg.n_layers, model.cfg.n_heads), device=model.cfg.device
+)
+
+
+def induction_score_hook(
+    pattern: Float[Tensor, "batch head_index dest_pos source_pos"], hook: HookPoint
+):
+    """
+    Calculates the induction score, and stores it in the [layer, head] position of the
+    `induction_score_store` tensor.
+    """
+    diag = pattern.diagonal(-(seq_len-1), dim1=-2, dim2=-1)
+    induction_score_store[hook.layer()] = diag.mean(dim=(0,-1))
+    return pattern
+
+
+# We make a boolean filter on activation names, that's true only on attention pattern names
+pattern_hook_names_filter = lambda name: name.endswith("pattern")
+
+# Run with hooks (this is where we write to the `induction_score_store` tensor`)
+model.run_with_hooks(
+    rep_tokens_10,
+    return_type=None,  # For efficiency, we don't need to calculate the logits
+    fwd_hooks=[(pattern_hook_names_filter, induction_score_hook)],
+)
+
+# Plot the induction scores for each head in each layer
+imshow(
+    induction_score_store,
+    labels={"x": "Head", "y": "Layer"},
+    title="Induction Score by Head",
+    text_auto=".2f",
+    width=900,
+    height=350,
+)
+
+# GPT2
+
+# %%
+
+induction_score_store = t.zeros(
+    (gpt2_small.cfg.n_layers, gpt2_small.cfg.n_heads), device=gpt2_small.cfg.device
+)
+
+def visualize_pattern_hook(
+    pattern: Float[Tensor, "batch head_index dest_pos source_pos"],
+    hook: HookPoint,
+):
+    print("Layer: ", hook.layer())
+    display(
+        cv.attention.attention_patterns(
+            tokens=gpt2_small.to_str_tokens(rep_tokens[0]), attention=pattern.mean(0)
+        )
+    )
+
+gpt2_small.run_with_hooks(
+    rep_tokens_10,
+    return_type=None,  # For efficiency, we don't need to calculate the logits
+    fwd_hooks=[
+        (pattern_hook_names_filter, induction_score_hook),
+        (pattern_hook_names_filter, visualize_pattern_hook),
+    ]
+)
+
+# Plot the induction scores for each head in each layer
+imshow(
+    induction_score_store,
+    labels={"x": "Head", "y": "Layer"},
+    title="Induction Score by Head",
+    text_auto=".2f",
+    width=900,
+    height=350,
+)
