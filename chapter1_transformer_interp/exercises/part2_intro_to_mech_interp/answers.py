@@ -6,6 +6,7 @@ from typing import Callable
 
 import circuitsvis as cv
 import einops
+import math
 import numpy as np
 import torch as t
 import torch.nn as nn
@@ -84,3 +85,85 @@ actual_tokens = gpt2_small.to_tokens(model_description_text)
 # %%
 matches = prediction == actual_tokens[0][1:]
 matches.sum()
+# %%
+gpt2_text = "Natural language processing tasks, such as question answering, machine translation, reading comprehension, and summarization, are typically approached with supervised learning on task-specific datasets."
+gpt2_tokens = gpt2_small.to_tokens(gpt2_text)
+gpt2_logits, gpt2_cache = gpt2_small.run_with_cache(gpt2_tokens, remove_batch_dim=True)
+
+print(type(gpt2_logits), type(gpt2_cache)) 
+# %%
+gpt2_logits.shape
+# %%
+gpt2_cache.keys()
+# %%
+attn_patterns_from_shorthand = gpt2_cache["pattern", 0]
+attn_patterns_from_shorthand.shape
+# %%
+attn_patterns_from_full_name = gpt2_cache["blocks.0.attn.hook_pattern"]
+attn_patterns_from_full_name.shape
+# %%
+t.testing.assert_close(attn_patterns_from_shorthand, attn_patterns_from_full_name)
+# %%
+layer0_pattern_from_cache = gpt2_cache["pattern", 0]
+
+q_hook = gpt2_cache["q", 0]
+k_hook = gpt2_cache["k", 0]
+
+dot_product = einops.einsum(q_hook, k_hook, "seq_q head d_head, seq_k head d_head -> head seq_q seq_k")
+scaled = dot_product / math.sqrt(gpt2_small.cfg.d_head)
+mask = t.triu(t.ones((q_hook.shape[0], q_hook.shape[0]), dtype=t.bool), diagonal=1).to(device)
+scaled.masked_fill_(mask, -1e9)
+layer0_pattern_from_q_and_k = t.softmax(scaled, dim=-1)
+
+t.testing.assert_close(layer0_pattern_from_cache, layer0_pattern_from_q_and_k)
+print("Tests passed!")
+# %%
+gpt2_cache["q", 0].shape
+# %%
+gpt2_cache["k", 0].shape
+# %%
+print(type(gpt2_cache))
+attention_pattern = gpt2_cache["pattern", 0]
+print(attention_pattern.shape)
+gpt2_str_tokens = gpt2_small.to_str_tokens(gpt2_text)
+
+print("Layer 0 Head Attention Patterns:")
+display(
+    cv.attention.attention_patterns(
+        tokens=gpt2_str_tokens,
+        attention=attention_pattern,
+        attention_head_names=[f"L0H{i}" for i in range(12)],
+    )
+)
+# %%
+print("Layer 0 Head Attention Heads:")
+display(
+    cv.attention.attention_heads(
+        tokens=gpt2_str_tokens,
+        attention=attention_pattern,
+        attention_head_names=[f"L0H{i}" for i in range(12)],
+    )
+)
+# %%
+neuron_activations_for_all_layers = t.stack([
+    gpt2_cache["post", layer] for layer in range(gpt2_small.cfg.n_layers)
+], dim=1)
+# shape = (seq_pos, layers, neurons)
+
+cv.activations.text_neuron_activations(
+    tokens=gpt2_str_tokens,
+    activations=neuron_activations_for_all_layers
+)
+# %%
+neuron_activations_for_all_layers_rearranged = utils.to_numpy(einops.rearrange(neuron_activations_for_all_layers, "seq layers neurons -> 1 layers seq neurons"))
+
+cv.topk_tokens.topk_tokens(
+    # Some weird indexing required here ¯\_(ツ)_/¯
+    tokens=[gpt2_str_tokens],
+    activations=neuron_activations_for_all_layers_rearranged,
+    max_k=7,
+    first_dimension_name="Layer",
+    third_dimension_name="Neuron",
+    first_dimension_labels=list(range(12))
+)
+# %%
