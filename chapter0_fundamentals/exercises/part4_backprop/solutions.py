@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 import numpy as np
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 Arr = np.ndarray
 grad_tracking_enabled = True
@@ -33,7 +33,6 @@ from plotly_utils import line
 
 # %%
 
-
 def log_back(grad_out: Arr, out: Arr, x: Arr) -> Arr:
     """Backwards function for f(x) = log(x)
 
@@ -51,7 +50,6 @@ if MAIN:
 
 # %%
 
-
 def unbroadcast(broadcasted: Arr, original: Arr) -> Arr:
     """
     Sum 'broadcasted' until it has the shape of 'original'.
@@ -64,9 +62,7 @@ def unbroadcast(broadcasted: Arr, original: Arr) -> Arr:
     broadcasted = broadcasted.sum(axis=tuple(range(n_dims_to_sum)))
 
     # Step 2: sum over dims which were originally 1 (but don't remove them)
-    dims_to_sum = tuple(
-        [i for i, (o, b) in enumerate(zip(original.shape, broadcasted.shape)) if o == 1 and b > 1]
-    )
+    dims_to_sum = tuple([i for i, (o, b) in enumerate(zip(original.shape, broadcasted.shape)) if o == 1 and b > 1])
     broadcasted = broadcasted.sum(axis=dims_to_sum, keepdims=True)
 
     assert broadcasted.shape == original.shape
@@ -77,7 +73,6 @@ if MAIN:
     tests.test_unbroadcast(unbroadcast)
 
 # %%
-
 
 def multiply_back0(grad_out: Arr, out: Arr, x: Arr, y: Arr | float) -> Arr:
     """Backwards function for x * y wrt argument 0 aka x."""
@@ -101,10 +96,9 @@ if MAIN:
 
 # %%
 
-
 def forward_and_back(a: Arr, b: Arr, c: Arr) -> tuple[Arr, Arr, Arr]:
     """
-    Calculates the output of the computational graph above (g), then backpropogates the gradients
+    Calculates the output of the computational graph above (g), then backpropagates the gradients
     and returns dg/da, dg/db, and dg/dc.
     """
     d = a * b
@@ -128,7 +122,6 @@ if MAIN:
 
 # %%
 
-
 @dataclass(frozen=True)
 class Recipe:
     """Extra information necessary to run backpropagation. You don't need to modify this."""
@@ -149,15 +142,15 @@ class Recipe:
     "Map from positional argument index to the Tensor at that position."
     "For passing gradients back along the computational graph."
 
-
 # %%
 
-
 class BackwardFuncLookup:
-    def __init__(self) -> None:
-        self.back_funcs = {}  # each entry is a tuple of (forward_fn, arg_position) -> back_fn
+    def __init__(self):
+        self.back_funcs = {}  
+        # keys are (forward_fn, arg_position) 
+        # values are corresponding back_fn
 
-    def add_back_func(self, forward_fn: Callable, arg_position: int, back_fn: Callable) -> None:
+    def add_back_func(self, forward_fn: Callable, arg_position: int, back_fn: Callable):
         self.back_funcs[(forward_fn, arg_position)] = back_fn
 
     def get_back_func(self, forward_fn: Callable, arg_position: int) -> Callable:
@@ -196,7 +189,7 @@ class Tensor:
     recipe: "Recipe | None"
     "Extra information necessary to run backpropagation."
 
-    def __init__(self, array: Arr | list, requires_grad=False):
+    def __init__(self, array: Arr | list, requires_grad : bool = False):
         self.array = array if isinstance(array, Arr) else np.array(array)
         if self.array.dtype == np.float64:
             self.array = self.array.astype(np.float32)
@@ -208,37 +201,37 @@ class Tensor:
     def __neg__(self) -> "Tensor":
         return negative(self)
 
-    def __add__(self, other) -> "Tensor":
+    def __add__(self, other: "Tensor | float") -> "Tensor":
         return add(self, other)
 
-    def __radd__(self, other) -> "Tensor":
+    def __radd__(self, other: "Tensor | float") -> "Tensor":
         return add(other, self)
 
-    def __sub__(self, other) -> "Tensor":
+    def __sub__(self, other: "Tensor | float") -> "Tensor":
         return subtract(self, other)
 
-    def __rsub__(self, other) -> "Tensor":
+    def __rsub__(self, other: "Tensor | float") -> "Tensor":
         return subtract(other, self)
 
-    def __mul__(self, other) -> "Tensor":
+    def __mul__(self, other: "Tensor | float") -> "Tensor":
         return multiply(self, other)
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: "Tensor | float") -> "Tensor":
         return multiply(other, self)
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: "Tensor | float") -> "Tensor":
         return true_divide(self, other)
 
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other: "Tensor | float") -> "Tensor":
         return true_divide(other, self)
 
-    def __matmul__(self, other):
+    def __matmul__(self, other: "Tensor") -> "Tensor":
         return matmul(self, other)
 
-    def __rmatmul__(self, other):
+    def __rmatmul__(self, other: "Tensor") -> "Tensor":
         return matmul(other, self)
 
-    def __eq__(self, other):
+    def __eq__(self, other: "Tensor | float") -> "Tensor":
         return eq(self, other)
 
     def __repr__(self) -> str:
@@ -278,7 +271,7 @@ class Tensor:
     def item(self):
         return self.array.item()
 
-    def sum(self, dim=None, keepdim=False) -> "Tensor":
+    def sum(self, dim: "int | tuple[int, ...] | None" = None, keepdim: bool = False) -> "Tensor":
         return sum(self, dim=dim, keepdim=keepdim)
 
     def log(self) -> "Tensor":
@@ -287,51 +280,51 @@ class Tensor:
     def exp(self) -> "Tensor":
         return exp(self)
 
-    def reshape(self, new_shape) -> "Tensor":
+    def reshape(self, new_shape: "tuple[int, ...]") -> "Tensor":
         return reshape(self, new_shape)
 
-    def permute(self, dims) -> "Tensor":
+    def permute(self, dims: "tuple[int, ...]") -> "Tensor":
         return permute(self, dims)
 
-    def maximum(self, other) -> "Tensor":
+    def maximum(self, other: "Tensor | float") -> "Tensor":
         return maximum(self, other)
 
     def relu(self) -> "Tensor":
         return relu(self)
 
-    def argmax(self, dim=None, keepdim=False) -> "Tensor":
+    def argmax(self, dim: int | None = None, keepdim: bool = False) -> "Tensor":
         return argmax(self, dim=dim, keepdim=keepdim)
 
     def uniform_(self, low: float, high: float) -> "Tensor":
         self.array[:] = np.random.uniform(low, high, self.array.shape)
         return self
 
-    def backward(self, end_grad: "Arr | Tensor | None" = None) -> None:
+    def backward(self, end_grad: "Arr | Tensor | None" = None):
         if isinstance(end_grad, Arr):
             end_grad = Tensor(end_grad)
-        return backprop(self, end_grad)
+        backprop(self, end_grad)
 
-    def size(self, dim: int | None = None):
+    def size(self, dim: "int | None" = None) -> "tuple[int, ...] | int":
         if dim is None:
             return self.shape
         return self.shape[dim]
 
     @property
-    def shape(self):
+    def shape(self) -> "tuple[int, ...]":
         return self.array.shape
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return self.array.ndim
 
     @property
-    def is_leaf(self):
+    def is_leaf(self) -> bool:
         """Same as https://pytorch.org/docs/stable/generated/torch.Tensor.is_leaf.html"""
         if self.requires_grad and self.recipe and self.recipe.parents:
             return False
         return True
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         if np.array(self.shape).prod() != 1:
             raise RuntimeError("bool value of Tensor with more than one value is ambiguous")
         return bool(self.item())
@@ -347,18 +340,16 @@ def zeros(*shape: int) -> Tensor:
     return Tensor(np.zeros(shape))
 
 
-def arange(start: int, end: int, step=1) -> Tensor:
+def arange(start: int, end: int, step: int = 1) -> Tensor:
     """Like torch.arange(start, end)."""
     return Tensor(np.arange(start, end, step=step))
 
 
-def tensor(array: Arr, requires_grad=False) -> Tensor:
+def tensor(array: Arr, requires_grad: bool = False) -> Tensor:
     """Like torch.tensor."""
     return Tensor(array, requires_grad=requires_grad)
 
-
 # %%
-
 
 def log_forward(x: Tensor) -> Tensor:
     """Performs np.log on a Tensor object."""
@@ -391,8 +382,7 @@ if MAIN:
 
 # %%
 
-
-def multiply_forward(a: Tensor | int, b: Tensor | int) -> Tensor:
+def multiply_forward(a: Tensor | float, b: Tensor | float) -> Tensor:
     """Performs np.multiply on a Tensor object."""
     assert isinstance(a, Tensor) or isinstance(b, Tensor)
 
@@ -405,9 +395,7 @@ def multiply_forward(a: Tensor | int, b: Tensor | int) -> Tensor:
     assert isinstance(out_arr, np.ndarray)
 
     # Find whether the tensor requires grad (need to check if ANY of the inputs do)
-    requires_grad = grad_tracking_enabled and any(
-        [isinstance(x, Tensor) and x.requires_grad for x in (a, b)]
-    )
+    requires_grad = grad_tracking_enabled and any([isinstance(x, Tensor) and x.requires_grad for x in (a, b)])
 
     # Create the output tensor from the underlying data and the requires_grad flag
     out = Tensor(out_arr, requires_grad)
@@ -435,8 +423,7 @@ if MAIN:
 
 # %%
 
-
-def wrap_forward_fn(numpy_func: Callable, is_differentiable=True) -> Callable:
+def wrap_forward_fn(numpy_func: Callable, is_differentiable: bool = True) -> Callable:
     """
     Args:
         numpy_func:
@@ -481,7 +468,7 @@ def wrap_forward_fn(numpy_func: Callable, is_differentiable=True) -> Callable:
     return tensor_func
 
 
-def _sum(x: Arr, dim=None, keepdim=False) -> Arr:
+def _sum(x: Arr, dim: "int | tuple[int, ...] | None" = None, keepdim: bool = False) -> Arr:
     # need to be careful with sum, because kwargs have different names in torch and numpy
     return np.sum(x, axis=dim, keepdims=keepdim)
 
@@ -497,11 +484,11 @@ if MAIN:
     tests.test_multiply(Tensor, multiply)
     tests.test_multiply_no_grad(Tensor, multiply)
     tests.test_multiply_float(Tensor, multiply)
+    tests.test_subclass_treated_as_tensor(Tensor, multiply)
     tests.test_eq(Tensor, eq)
     tests.test_sum(Tensor)
 
 # %%
-
 
 class Node:
     def __init__(self, *children):
@@ -514,14 +501,12 @@ def get_children(node: Node) -> list[Node]:
 
 def topological_sort(node: Node, get_children: Callable) -> list[Node]:
     """
-    Return a list of node's descendants in reverse topological order from future
-    to past (i.e. `node` should be last).
+    Return all nodes reachable from `node` via `get_children`, in topological order
+    such that each node appears after all of its children (i.e. `node` itself is last).
 
-    Should raise an error if the graph with `node` as root is not in fact acyclic.
+    Should raise an error if the graph contains a cycle.
     """
-    result: list[
-        Node
-    ] = []  # stores the list of nodes to be returned (in reverse topological order)
+    result: list[Node] = []  # stores the list of nodes to be returned (in reverse topological order)
     perm: set[Node] = set()  # same as `result`, but as a set (faster to check for membership)
     temp: set[Node] = set()  # keeps track of previously visited nodes (to detect cyclicity)
 
@@ -555,7 +540,6 @@ if MAIN:
 
 # %%
 
-
 def sorted_computational_graph(tensor: Tensor) -> list[Tensor]:
     """
     For a given tensor, return a list of Tensors that make up the nodes of the given Tensor's
@@ -584,8 +568,7 @@ if MAIN:
 
 # %%
 
-
-def backprop(end_node: Tensor, end_grad: Tensor | None = None) -> None:
+def backprop(end_node: Tensor, end_grad: Tensor | None = None):
     """Accumulates gradients in the grad field of each leaf node.
 
     tensor.backward() is equivalent to backprop(tensor).
@@ -610,7 +593,7 @@ def backprop(end_node: Tensor, end_grad: Tensor | None = None) -> None:
         # (1) If it's a leaf node, then set/update gradient if requires_grad=True, and stop here.
         if node.is_leaf:
             if node.requires_grad:
-                node.grad = Tensor(outgrad) if node.grad is None else node.grad + outgrad
+                node.grad = Tensor(outgrad) if node.grad is None else Tensor(node.grad.array + outgrad)
 
         # (2) If not a leaf node then it must have a recipe, so we iterate through its parents and
         # update their grads.
@@ -634,9 +617,11 @@ if MAIN:
     tests.test_backprop_requires_grad_sum(Tensor)
     tests.test_backprop_requires_grad_false(Tensor)
     tests.test_backprop_float_arg(Tensor)
+    tests.test_backprop_shared_parent(Tensor)
+    tests.test_backprop_grad_accumulation(Tensor)
+    tests.test_backprop_broadcast_shapes(Tensor)
 
 # %%
-
 
 def negative_back(grad_out: Arr, out: Arr, x: Arr) -> Arr:
     """Backward function for f(x) = -x elementwise."""
@@ -651,7 +636,6 @@ if MAIN:
 
 # %%
 
-
 def exp_back(grad_out: Arr, out: Arr, x: Arr) -> Arr:
     """Backward function for f(x) = exp(x) elementwise."""
     return out * grad_out
@@ -665,8 +649,7 @@ if MAIN:
 
 # %%
 
-
-def reshape_back(grad_out: Arr, out: Arr, x: Arr, new_shape: tuple) -> Arr:
+def reshape_back(grad_out: Arr, out: Arr, x: Arr, new_shape: tuple[int, ...]) -> Arr:
     """Backward function for torch.reshape."""
     return np.reshape(grad_out, x.shape)
 
@@ -679,8 +662,7 @@ if MAIN:
 
 # %%
 
-
-def permute_back(grad_out: Arr, out: Arr, x: Arr, axes: tuple) -> Arr:
+def permute_back(grad_out: Arr, out: Arr, x: Arr, axes: tuple[int, ...]) -> Arr:
     """
     Backward function for torch.permute. Works by inverting the transposition in the forward
     function.
@@ -696,8 +678,13 @@ if MAIN:
 
 # %%
 
-
-def sum_back(grad_out: Arr, out: Arr, x: Arr, dim=None, keepdim=False):
+def sum_back(
+    grad_out: Arr, 
+    out: Arr, 
+    x: Arr, 
+    dim: "int | tuple[int, ...] | None" = None, 
+    keepdim: bool = False
+) -> Arr:
     """Backward function for torch.sum"""
     # Step (1): if keepdim=False, then we need to add back in dims, so grad_out and x have the
     # same number of dims. We don't bother with the dim=None case, since then grad_out is a scalar
@@ -709,7 +696,7 @@ def sum_back(grad_out: Arr, out: Arr, x: Arr, dim=None, keepdim=False):
     return np.broadcast_to(grad_out, x.shape)
 
 
-def _sum(x: Arr, dim=None, keepdim=False) -> Arr:
+def _sum(x: Arr, dim: "int | tuple[int, ...] | None" = None, keepdim: bool = False) -> Arr:
     """Like torch.sum, calling np.sum internally."""
     return np.sum(x, axis=dim, keepdims=keepdim)
 
@@ -734,12 +721,8 @@ if MAIN:
     BACK_FUNCS.add_back_func(np.add, 1, lambda grad_out, out, x, y: unbroadcast(grad_out, y))
     BACK_FUNCS.add_back_func(np.subtract, 0, lambda grad_out, out, x, y: unbroadcast(grad_out, x))
     BACK_FUNCS.add_back_func(np.subtract, 1, lambda grad_out, out, x, y: unbroadcast(-grad_out, y))
-    BACK_FUNCS.add_back_func(
-        np.true_divide, 0, lambda grad_out, out, x, y: unbroadcast(grad_out / y, x)
-    )
-    BACK_FUNCS.add_back_func(
-        np.true_divide, 1, lambda grad_out, out, x, y: unbroadcast(grad_out * (-x / y**2), y)
-    )
+    BACK_FUNCS.add_back_func(np.true_divide, 0, lambda grad_out, out, x, y: unbroadcast(grad_out / y, x))
+    BACK_FUNCS.add_back_func(np.true_divide, 1, lambda grad_out, out, x, y: unbroadcast(grad_out * (-x / y**2), y))
 
     tests.test_add_broadcasted(Tensor)
     tests.test_subtract_broadcasted(Tensor)
@@ -747,10 +730,10 @@ if MAIN:
 
 # %%
 
-Index = int | tuple[int, ...] | tuple[Arr] | tuple[Tensor]
+Index = int | tuple[int, ...] | tuple[Arr, ...] | tuple[Tensor, ...]
 
 
-def coerce_index(index: Index):
+def coerce_index(index: Index) -> "int | tuple[int, ...] | tuple[Arr, ...]":
     """Helper function: converts array of tensors to array of numpy arrays."""
     if isinstance(index, tuple) and all(isinstance(i, Tensor) for i in index):
         return tuple([i.array for i in index])
@@ -763,14 +746,14 @@ def _getitem(x: Arr, index: Index) -> Arr:
     return x[coerce_index(index)]
 
 
-def getitem_back(grad_out: Arr, out: Arr, x: Arr, index: Index):
+def getitem_back(grad_out: Arr, out: Arr, x: Arr, index: Index) -> Arr:
     """
     Backwards function for _getitem.
 
     Hint: use np.add.at(a, indices, b)
     This function works just like a[indices] += b, except that it allows for repeated indices.
     """
-    new_grad_out = np.full_like(x, 0)
+    new_grad_out = np.zeros_like(x)
     np.add.at(new_grad_out, coerce_index(index), grad_out)
     return new_grad_out
 
@@ -781,8 +764,7 @@ if MAIN:
 
 # %%
 
-
-def _argmax(x: Arr, dim=None, keepdim=False):
+def _argmax(x: Arr, dim: "int | None" = None, keepdim: bool = False) -> Arr:
     """Like torch.argmax."""
     result = np.argmax(x, axis=dim)
     if keepdim:
@@ -800,7 +782,6 @@ if MAIN:
     assert b.item() == 3
 
 # %%
-
 
 def add_(x: Tensor, other: Tensor, alpha: float = 1.0) -> Tensor:
     """Like torch.add_. Compute x += other * alpha in-place and return tensor."""
@@ -851,14 +832,13 @@ if MAIN:
 
 # %%
 
-
-def maximum_back0(grad_out: Arr, out: Arr, x: Arr, y: Arr):
+def maximum_back0(grad_out: Arr, out: Arr, x: Arr, y: Arr) -> Arr:
     """Backwards function for max(x, y) wrt x."""
     bool_sum = (x > y) + 0.5 * (x == y)
     return unbroadcast(grad_out * bool_sum, x)
 
 
-def maximum_back1(grad_out: Arr, out: Arr, x: Arr, y: Arr):
+def maximum_back1(grad_out: Arr, out: Arr, x: Arr, y: Arr) -> Arr:
     """Backwards function for max(x, y) wrt y."""
     bool_sum = (x < y) + 0.5 * (x == y)
     return unbroadcast(grad_out * bool_sum, y)
@@ -874,7 +854,6 @@ if MAIN:
 
 # %%
 
-
 def relu(x: Tensor) -> Tensor:
     """Like torch.nn.function.relu(x, inplace=False)."""
     return maximum(x, 0.0)
@@ -884,7 +863,6 @@ if MAIN:
     tests.test_relu(Tensor)
 
 # %%
-
 
 def _matmul2d(x: Arr, y: Arr) -> Arr:
     """Matrix multiply restricted to the case where both inputs are exactly 2D."""
@@ -908,13 +886,12 @@ if MAIN:
 
 # %%
 
-
 class Parameter(Tensor):
-    def __init__(self, tensor: Tensor, requires_grad=True):
+    def __init__(self, tensor: Tensor, requires_grad: bool = True):
         """Share the array with the provided tensor."""
-        return super().__init__(tensor.array, requires_grad=requires_grad)
+        super().__init__(tensor.array, requires_grad=requires_grad)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Parameter containing:\n{super().__repr__()}"
 
 
@@ -923,17 +900,13 @@ if MAIN:
     p = Parameter(x)
     assert p.requires_grad
     assert p.array is x.array
-    assert (
-        repr(p)
-        == "Parameter containing:\nTensor(array([1., 2., 3.], dtype=float32), requires_grad=True)"
-    )
+    assert repr(p) == "Parameter containing:\nTensor(array([1., 2., 3.], dtype=float32), requires_grad=True)"
     x.add_(Tensor(np.array(2.0)))
-    assert np.allclose(
-        p.array, np.array([3.0, 4.0, 5.0])
-    ), "in-place modifications to the original tensor should affect the parameter"
+    assert np.allclose(p.array, np.array([3.0, 4.0, 5.0])), (
+        "in-place modifications to the original tensor should affect the parameter"
+    )
 
 # %%
-
 
 class Module:
     _modules: dict[str, "Module"]
@@ -958,24 +931,29 @@ class Module:
             for mod in self.modules():
                 yield from mod.parameters(recurse=True)
 
-    def __setattr__(self, key: str, val: Any) -> None:
+    def __setattr__(self, key: str, val: Any):
         """
         If val is a Parameter or Module, store it in the appropriate _parameters or _modules dict.
         Otherwise, call __setattr__ from the superclass.
         """
+        # The use of `pop` here ensures reassigning a name from Parameter to Module 
+        # (or back) doesn't leave a stale entry in the other registry, 
+        # which `parameters()` / `modules()` would keep yielding. Matches torch.nn.Module
         if isinstance(val, Parameter):
+            self._modules.pop(key, None)
             self._parameters[key] = val
         elif isinstance(val, Module):
+            self._parameters.pop(key, None)
             self._modules[key] = val
         super().__setattr__(key, val)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.forward(*args, **kwargs)
 
-    def forward(self):
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("Subclasses must implement forward!")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         _indent = lambda s_, nSpaces: re.sub("\n", "\n" + (" " * nSpaces), s_)
         lines = [f"({key}): {_indent(repr(module), 2)}" for key, module in self._modules.items()]
         return "".join(
@@ -1011,12 +989,11 @@ if MAIN:
 
 # %%
 
-
 class Linear(Module):
     weight: Parameter
     bias: Parameter | None
 
-    def __init__(self, in_features: int, out_features: int, bias=True):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True):
         """
         A simple linear (technically, affine) transformation.
 
@@ -1036,18 +1013,13 @@ class Linear(Module):
         x: shape (*, in_features)
         Return: shape (*, out_features)
         """
-        out = (
-            x @ self.weight.T
-        )  # transpose has been defined as .permute(-1, -2), see the `Tensor` class
+        out = x @ self.weight.T  # transpose has been defined as .permute(-1, -2), see the `Tensor` class
         if self.bias is not None:
             out = out + self.bias
         return out
 
     def extra_repr(self) -> str:
-        return (
-            f"in_features={self.in_features}, out_features={self.out_features}, "
-            f"bias={self.bias is not None}"
-        )
+        return f"in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
 
 
 if MAIN:
@@ -1057,7 +1029,10 @@ if MAIN:
 
     input = Tensor([[1.0, 2.0, 3.0]])
     output = linear(input)
-    assert output.requires_grad
+    assert output.requires_grad, (
+        "Output of Linear should require grad, since its weight is a Parameter (which requires grad). If your "
+        "`wrap_forward_fn` checks `type(x) == Tensor`, it will miss `Parameter`, a subclass of Tensor - use `isinstance` instead."
+    )
 
     expected_output = input @ linear.weight.T + linear.bias
     np.testing.assert_allclose(output.array, expected_output.array)
@@ -1066,14 +1041,11 @@ if MAIN:
 
 # %%
 
-
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
         return relu(x)
 
-
 # %%
-
 
 class MLP(Module):
     def __init__(self):
@@ -1091,9 +1063,7 @@ class MLP(Module):
         x = self.output(x)
         return x
 
-
 # %%
-
 
 def cross_entropy(logits: Tensor, true_labels: Tensor) -> Tensor:
     """Like torch.nn.functional.cross_entropy with reduction='none'.
@@ -1104,6 +1074,8 @@ def cross_entropy(logits: Tensor, true_labels: Tensor) -> Tensor:
     Return: shape (batch, ) containing the per-example loss.
     """
     batch_size = logits.shape[0]
+    logit_max = Tensor(logits.array.max(-1, keepdims=True))
+    logits = logits - logit_max
     logprobs = logits - logits.exp().sum(-1, keepdim=True).log()
     return -logprobs[arange(0, batch_size), true_labels]
 
@@ -1112,7 +1084,6 @@ if MAIN:
     tests.test_cross_entropy(Tensor, cross_entropy)
 
 # %%
-
 
 class NoGrad:
     """Context manager that disables grad inside the block. Like torch.no_grad."""
@@ -1129,7 +1100,7 @@ class NoGrad:
         self.was_enabled = grad_tracking_enabled
         grad_tracking_enabled = False
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, type: Any, value: Any, traceback: Any):
         """
         Method which is called whenever we exit the context manager. This sets the global
         `grad_tracking_enabled` variable back to the value it had before we entered the context
@@ -1144,13 +1115,9 @@ if MAIN:
     with NoGrad():
         assert not grad_tracking_enabled
     assert grad_tracking_enabled
-    print(
-        "Verified that we've disabled gradients inside `NoGrad`, then set back to its previous "
-        "value once we exit."
-    )
+    print("Verified that we've disabled gradients inside `NoGrad`, then set back to its previous value once we exit.")
 
 # %%
-
 
 class SGD:
     def __init__(self, params: Iterable[Parameter], lr: float):
@@ -1159,12 +1126,12 @@ class SGD:
         self.lr = lr
         self.b = [None for _ in self.params]
 
-    def zero_grad(self) -> None:
+    def zero_grad(self):
         """Iterates through params, and sets all grads to None."""
         for p in self.params:
             p.grad = None
 
-    def step(self) -> None:
+    def step(self):
         """Iterates through params, and updates each of them by subtracting `param.grad * lr`."""
         with NoGrad():
             for p in self.params:
@@ -1182,7 +1149,6 @@ if MAIN:
 
 # %%
 
-
 def train(
     model: MLP,
     train_loader: DataLoader,
@@ -1199,6 +1165,12 @@ def train(
         loss = cross_entropy(output, target).sum() / len(output)
         loss.backward()
         progress_bar.set_description(f"Train set: Avg loss: {loss.item():.3f}")
+        for p in model.parameters():
+            assert p.grad is not None, (
+                "A parameter has no gradient after `loss.backward()`, so backprop never reached it. Common causes: "
+                "`wrap_forward_fn` using `type(x) == Tensor` instead of `isinstance` (so `Parameter` is skipped), or "
+                "`backprop` not recording gradients for every leaf with `requires_grad=True`."
+            )
         optimizer.step()
         if train_loss_list is not None:
             train_loss_list.append(loss.item())
@@ -1216,21 +1188,25 @@ def test(model: MLP, test_loader: DataLoader, test_accuracy_list: list | None = 
             test_accuracy += (pred == target.reshape(pred.shape)).sum().item()
     n_data = len(test_loader.dataset)
     test_loss /= n_data
-    print(
-        f"Test set:  Avg loss: {test_loss:.3f}, Accuracy: {test_accuracy}/{n_data} "
-        f"({test_accuracy / n_data:.1%})"
-    )
+    print(f"Test set:  Avg loss: {test_loss:.3f}, Accuracy: {test_accuracy}/{n_data} ({test_accuracy / n_data:.1%})")
     if test_accuracy_list is not None:
         test_accuracy_list.append(test_accuracy / n_data)
 
 
 if MAIN:
+    # Cap BLAS threads: the matmuls here are small enough that on a many-core machine, the default
+    # (one thread per core) is dominated by thread-sync overhead and can be ~10x slower than 4 threads.
+    # Feel free to adjust/remove if this causes problems.
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(4)
+
     num_epochs = 5
     model = MLP()
     start = time.time()
     train_loss_list = []
     test_accuracy_list = []
     optimizer = SGD(model.parameters(), 0.01)
+    test(model, test_loader, test_accuracy_list) # pre-training baseline
     for epoch in range(num_epochs):
         train(model, train_loader, optimizer, epoch, train_loss_list)
         test(model, test_loader, test_accuracy_list)
@@ -1242,8 +1218,8 @@ if MAIN:
         x_max=num_epochs,
         yaxis2_range=[0, 1],
         use_secondary_yaxis=True,
-        labels={"x": "Batches seen", "y1": "Cross entropy loss", "y2": "Test accuracy"},
-        title="MLP training on MNIST from scratch!",
+        labels={"x": "Epoch", "y1": "Cross entropy loss", "y2": "Test accuracy"},
+        title="MLP training on MNIST from scratch",
         width=800,
     )
 
